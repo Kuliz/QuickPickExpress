@@ -1,6 +1,10 @@
-// supabaseClient.js
-const SUPABASE_URL = 'https://clcfzeytfqrjngyemwiq.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Ny1Y4E9jx5BuDYFJznKRZg_UGMOYM4_';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js';
 
-// Initialize the Supabase client
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+const supabaseUrl = 'https://clcfzeytfqrjngyemwiq.supabase.co';
+const supabaseKey = 'YOUR_SUPABASE_ANON_KEY'; // Replace with your actual anon key if not already set globally[cite: 3]
+
+// Declare globally once so all scripts can access it safely[cite: 3]
+window.supabaseClient = createClient(supabaseUrl, supabaseKey);
+const supabase = window.supabaseClient;
+
+export { supabase };
