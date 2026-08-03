@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Customer Dashboard | QuickPick Express</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabaseClient.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+    :root { --ink:#0e4c69; --muted:#5d7682; --paper:#f7f7f2; --white:#fff; --red:#ef4b3f; --blue:#1468a5; --green:#27a66f; --line:#dce8e3; --shadow:0 20px 60px rgba(14,76,105,.12); }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--paper); font-family:'DM Sans',sans-serif; }
+    button,input { font:inherit; }
+    button { cursor:pointer; border:0; }
+    .shell { max-width:1000px; margin:auto; padding:0 30px; }
+    .topbar { height:76px; display:flex; align-items:center; justify-content:space-between; }
+    .brand { display:flex; align-items:center; gap:11px; font-family:'Space Grotesk'; font-size:20px; font-weight:700; text-decoration:none; color:var(--ink); }
+    .brand-mark { height:40px; display:flex; align-items:center; }
+    .brand-mark img { height:100%; width:auto; object-fit:contain; border-radius:8px; }
+    .brand em { font-style:normal; color:#f7b32b; }
+    .panel { background:white; border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); padding:28px; margin-top:20px; }
+    .field { display:flex; flex-direction:column; gap:7px; margin-top:15px; }
+    .field label { font-size:12px; font-weight:700; color:#536a70; }
+    .field input { border:1px solid var(--line); border-radius:8px; padding:12px; outline:none; background:#fbfdfc; }
+    .primary { background:var(--red); color:white; padding:13px 18px; border-radius:9px; font-weight:700; }
+    .outline { background:white; color:var(--ink); padding:12px 17px; border:1px solid var(--line); border-radius:9px; font-weight:700; text-decoration:none; }
+    .toast { position:fixed; bottom:22px; right:22px; background:var(--ink); color:white; padding:14px 18px; border-radius:10px; z-index:1100; display:none; }
+    .toast.show { display:block; }
+  </style>
+</head>
+<body>
+  <header class="shell topbar">
+    <a href="index.html" class="brand">
+      <div class="brand-mark">
+        <img src="Quickpicklogo.jpg" alt="QuickPick Express Logo" />
+      </div>
+      <span>QuickPick <em>Express</em></span>
+    </a>
+    <button class="outline" onclick="signout()">Sign Out</button>
+  </header>
+
+  <main class="shell" style="padding:40px 0;">
+    <h2>Book a Delivery</h2>
+    <p style="color:var(--muted);">Fill out package details to dispatch a verified rider immediately.</p>
+    
+    <div class="panel">
+      <div class="field"><label>Pickup Location</label><input id="pickup" placeholder="e.g., Northgate Gardens" /></div>
+      <div class="field"><label>Dropoff Location</label><input id="dropoff" placeholder="e.g., Cairo Road, Lusaka" /></div>
+      <div class="field"><label>Package Description</label><input id="package" placeholder="e.g., Documents / Electronics" /></div>
+      <div class="field"><label>Estimated Distance</label><input id="distance" placeholder="e.g., 5.2 km" /></div>
+      <div class="field"><label>Price Offer (ZMW)</label><input id="price" placeholder="e.g., K75" /></div>
+      <button class="primary" style="width:100%;margin-top:20px;justify-content:center;" onclick="submitOrder()">Dispatch Order to Supabase</button>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    async function submitOrder(){
+      const sessionUser = await supabase.auth.getUser();
+      const email = sessionUser.data.user ? sessionUser.data.user.email : 'guest@quickpick.com';
+
+      const orderData = {
+        id: 'QP-' + Math.floor(1000 + Math.random() * 9000),
+        customer_email: email,
+        pickup: document.getElementById('pickup').value.trim(),
+        dropoff: document.getElementById('dropoff').value.trim(),
+        package_type: document.getElementById('package').value.trim(),
+        distance: document.getElementById('distance').value.trim(),
+        price: document.getElementById('price').value.trim(),
+        status: 'new'
+      };
+
+      if(!orderData.pickup || !orderData.dropoff || !orderData.price){
+        showToast('Please fill in all mandatory delivery fields.');
+        return;
+      }
+
+      const { error } = await supabase.from('orders').insert([orderData]);
+
+      if(error){
+        showToast('Error saving order: ' + error.message);
+      } else {
+        showToast('Order successfully sent to Supabase!');
+        document.getElementById('pickup').value = '';
+        document.getElementById('dropoff').value = '';
+        document.getElementById('package').value = '';
+        document.getElementById('distance').value = '';
+        document.getElementById('price').value = '';
+      }
+    }
+
+    async function signout(){
+      await supabase.auth.signOut();
+      window.location.href = 'index.html';
+    }
+
+    function showToast(msg){
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      setTimeout(()=>t.classList.remove('show'), 3000);
+    }
+  </script>
+</body>
+</html>
