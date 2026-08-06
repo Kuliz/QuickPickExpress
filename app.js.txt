@@ -1,0 +1,191 @@
+// ---------- SUPABASE ----------
+const SUPABASE_URL = 'https://nrofadcaivkoxvhoaogx.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_6Bebn3Mbf2P54Nwo-yAzoA_-sniqO0l';
+
+const supabaseClient = supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+// --------------------------------
+const quoteBtn = document.getElementById('quoteBtn');
+const bookBtn = document.getElementById('bookBtn');
+
+function showToast(message) {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.style.display = 'block';
+  setTimeout(() => toast.style.display = 'none', 3000);
+}
+
+function calculateQuote() {
+  const serviceType = document.getElementById('serviceType').value;
+  const distance = Number(document.getElementById('distance').value);
+
+  const baseFare = {
+    package: 25,
+    passenger: 18,
+    errand: 30
+  }[serviceType];
+
+  const distanceRate = {
+    package: 2,
+    passenger: 1.7,
+    errand: 2.4
+  }[serviceType];
+
+  const distanceFee = +(distance * distanceRate).toFixed(2);
+  const total = +(baseFare + distanceFee).toFixed(2);
+
+  document.getElementById('baseFare').textContent = `K ${baseFare.toFixed(2)}`;
+  document.getElementById('distanceFee').textContent = `K ${distanceFee.toFixed(2)}`;
+  document.getElementById('totalFare').textContent = `K ${total.toFixed(2)}`;
+
+  document.getElementById('quoteBox').classList.remove('hidden');
+  bookBtn.classList.remove('hidden');
+
+  return total;
+}
+
+quoteBtn.addEventListener('click', calculateQuote);
+
+function getFormData() {
+  return {
+    id: `QP-${Date.now()}`,
+    serviceType: document.getElementById('serviceType').value,
+    pickup: document.getElementById('pickup').value.trim(),
+    dropoff: document.getElementById('dropoff').value.trim(),
+    senderName: document.getElementById('senderName').value.trim(),
+    senderPhone: document.getElementById('senderPhone').value.trim(),
+    receiverName: document.getElementById('receiverName').value.trim(),
+    receiverPhone: document.getElementById('receiverPhone').value.trim(),
+    distance: document.getElementById('distance').value,
+    total: document.getElementById('totalFare').textContent,
+    createdAt: new Date().toLocaleString()
+  };
+}
+
+function validateBooking(data) {
+  return Object.values(data).every(v => String(v).trim() !== '');
+}
+
+async function saveBooking() {
+  calculateQuote();
+
+  const data = getFormData();
+
+  if (!validateBooking(data)) {
+    showToast('Please complete all fields.');
+    return;
+  }
+
+  const booking = {
+    booking_code: data.id,
+    service_type: data.serviceType,
+    pickup: data.pickup,
+    dropoff: data.dropoff,
+    sender_name: data.senderName,
+    sender_phone: data.senderPhone,
+    receiver_name: data.receiverName,
+    receiver_phone: data.receiverPhone,
+    distance_km: Number(data.distance),
+    total_amount: Number(
+      data.total.replace('K ', '')
+    ),
+    status: 'requested'
+  };
+
+  const { error } = await supabaseClient
+    .from('bookings')
+    .insert([booking]);
+
+  if (error) {
+    console.error(error);
+    showToast('Could not save booking online.');
+    return;
+  }
+
+  showToast(`Booking ${data.id} saved online.`);
+
+  renderOnlineBookings();
+  startTracking(data.id);
+}
+bookBtn.addEventListener('click', saveBooking);
+
+function renderBookings() {
+  const section = document.getElementById('bookingsSection');
+  const list = document.getElementById('bookingsList');
+
+  const bookings = JSON.parse(localStorage.getItem('quickpick-bookings') || '[]');
+
+  if (!bookings.length) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  section.classList.remove('hidden');
+
+  list.innerHTML = bookings.map(b => `
+    <div class="booking-item">
+      <strong>${b.id}</strong><br>
+      ${b.pickup} → ${b.dropoff}<br>
+      ${b.total}<br>
+      <small>${b.createdAt}</small>
+    </div>
+  `).join('');
+}
+
+document.getElementById('trackBtn').addEventListener('click', () => {
+  const code = prompt('Enter tracking code');
+  if (code) showToast(`Tracking ${code} (demo mode)`);
+});
+
+renderOnlineBookings();
+supabaseClient
+  .channel('bookings-live')
+  .on(
+    'postgres_changes',
+    {
+      event: '*',
+      schema: 'public',
+      table: 'bookings'
+    },
+    () => {
+      renderOnlineBookings();
+      showToast('New booking update received.');
+    }
+  )
+  .subscribe();
+initMap();
+async function renderOnlineBookings() {
+  const section = document.getElementById('bookingsSection');
+  const list = document.getElementById('bookingsList');
+
+  const { data, error } = await supabaseClient
+    .from('bookings')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  if (!data.length) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  section.classList.remove('hidden');
+
+  list.innerHTML = data.map(b => `
+    <div class="booking-item">
+      <strong>${b.booking_code}</strong><br>
+      ${b.pickup} → ${b.dropoff}<br>
+      K ${Number(b.total_amount).toFixed(2)}<br>
+      <small>${new Date(b.created_at).toLocaleString()}</small>
+    </div>
+  `).join('');
+}
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js');
+}
