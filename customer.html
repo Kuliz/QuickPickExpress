@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Customer Dashboard | QuickPick Express</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabaseClient.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Leaflet Map SDK -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+    :root { --ink:#0e4c69; --muted:#5d7682; --paper:#f7f7f2; --white:#fff; --red:#ef4b3f; --blue:#1468a5; --green:#27a66f; --line:#dce8e3; --shadow:0 15px 45px rgba(14,76,105,.1); }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--paper); font-family:'DM Sans',sans-serif; }
+    button,input,select,textarea { font:inherit; }
+    button { cursor:pointer; border:0; }
+    .shell { max-width:1240px; margin:auto; padding:0 24px; }
+    .topbar { height:76px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:11px; font-family:'Space Grotesk'; font-size:20px; font-weight:700; text-decoration:none; color:var(--ink); }
+    .brand-mark { width:44px; height:44px; border-radius:12px; overflow:hidden; display:flex; align-items:center; justify-content:center; background:var(--ink); }
+    .brand-mark img { width:100%; height:100%; object-fit:cover; }
+    .brand em { font-style:normal; color:#f7b32b; }
+    .grid { display:grid; grid-template-columns: 420px 1fr; gap:24px; padding:30px 0 60px; }
+    .panel { background:white; border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); padding:24px; }
+    .field { display:flex; flex-direction:column; gap:6px; margin-top:14px; }
+    .field label { font-size:12px; font-weight:700; color:#536a70; text-transform:uppercase; }
+    .field input, .field select, .field textarea { border:1px solid var(--line); border-radius:9px; padding:11px; outline:none; background:#fbfdfc; }
+    .search-row { display:flex; gap:8px; }
+    .search-row input { flex:1; }
+    .search-btn { background:var(--blue); color:white; padding:0 14px; border-radius:9px; font-weight:700; }
+    #map { width:100%; height:540px; border-radius:18px; border:1px solid var(--line); z-index:1; }
+    .price-box { background:#f0f6f9; border:1px solid #d2e4ee; border-radius:12px; padding:16px; margin-top:18px; }
+    .price-row { display:flex; justify-content:space-between; font-size:13px; color:var(--muted); margin-bottom:6px; }
+    .price-total { display:flex; justify-content:space-between; font-size:18px; font-weight:700; color:var(--ink); border-top:1px dashed #c0d8e6; padding-top:10px; margin-top:8px; }
+    .primary { background:var(--red); color:white; padding:13px 18px; border-radius:10px; font-weight:700; width:100%; text-align:center; box-shadow:0 6px 16px rgba(239,75,63,.2); margin-top:16px; }
+    .outline { background:white; color:var(--ink); padding:10px 16px; border:1px solid var(--line); border-radius:9px; font-weight:700; }
+    .payment-options { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px; }
+    .payment-btn { border:2px solid var(--line); padding:10px; border-radius:10px; text-align:center; font-weight:700; background:white; color:var(--ink); }
+    .payment-btn.selected { border-color:var(--blue); background:#eef6fc; color:var(--blue); }
+    .toast { position:fixed; bottom:22px; right:22px; background:var(--ink); color:white; padding:14px 20px; border-radius:10px; z-index:1100; display:none; }
+    .toast.show { display:block; }
+    @media (max-width:900px) { .grid { grid-template-columns:1fr; } #map { height:360px; } }
+  </style>
+</head>
+<body>
+  <header class="shell topbar">
+    <a href="index.html" class="brand">
+      <div class="brand-mark">
+        <img 
+          src="Quickpicklogo.jpg" 
+          alt="QuickPick Express Logo" 
+          onerror="this.onerror=null; this.src='Quickpicklogo.jpg.jpeg'; this.onerror=function(){this.src='Quickpicklogo.png';}" 
+        />
+      </div>
+      <span>QuickPick <em>Express</em></span>
+    </a>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <span id="user-display" style="font-size:13px;color:var(--muted);"></span>
+      <button class="outline" onclick="signout()">Sign Out</button>
+    </div>
+  </header>
+
+  <main class="shell grid">
+    <!-- Booking Controls -->
+    <div class="panel">
+      <h2 style="font-family:'Space Grotesk';margin:0 0 4px;">Book Service</h2>
+      <p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Select pick/drop locations on map or search address.</p>
+
+      <div class="field">
+        <label>Service Type</label>
+        <select id="service-type" onchange="updateCalculations()">
+          <option value="package">📦 Package Delivery (K15 Handling)</option>
+          <option value="passenger">🛵 Motorbike Drop-Off (K20 Handling)</option>
+          <option value="errand">🛒 Local Errand / Buy &amp; Deliver (K15 Handling)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Pickup Location</label>
+        <div class="search-row">
+          <input id="pickup-search" placeholder="Search address or click map..." />
+          <button class="search-btn" onclick="geocodeAddress('pickup')">Find</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Drop-off Location</label>
+        <div class="search-row">
+          <input id="dropoff-search" placeholder="Search destination or click map..." />
+          <button class="search-btn" onclick="geocodeAddress('dropoff')">Find</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Item / Errand Notes</label>
+        <textarea id="order-details" rows="2" placeholder="e.g. Small package, or Buy 2 loaves of bread at Shoprite"></textarea>
+      </div>
+
+      <!-- Pricing Breakdown -->
+      <div class="price-box">
+        <div class="price-row"><span>Estimated Distance:</span><strong id="disp-distance">0.0 KM</strong></div>
+        <div class="price-row"><span>Service Handling Fee:</span><strong id="disp-handling">K15.00</strong></div>
+        <div class="price-row"><span>Fuel Rate (K32.50/L):</span><strong id="disp-fuel">K0.00</strong></div>
+        <div class="price-total"><span>Total Fare:</span><span id="disp-total" style="color:var(--red);">K15.00</span></div>
+      </div>
+
+      <!-- Payment UI -->
+      <div class="field">
+        <label>Select Payment Provider</label>
+        <div class="payment-options">
+          <button class="payment-btn selected" id="pay-mtn" onclick="selectPayment('mtn')">MTN MoMo</button>
+          <button class="payment-btn" id="pay-airtel" onclick="selectPayment('airtel')">Airtel Money</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Mobile Money Phone Number</label>
+        <input id="pay-phone" placeholder="e.g., 0960000000" />
+      </div>
+
+      <button class="primary" onclick="processPaymentAndDispatch()">Pay &amp; Dispatch Order</button>
+    </div>
+
+    <!-- Map View -->
+    <div>
+      <div id="map"></div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let map, pickupMarker, dropoffMarker;
+    let pickupCoords = null, dropoffCoords = null;
+    let selectedPayment = 'mtn';
+
+    const DEFAULT_LAT = -15.4167;
+    const DEFAULT_LNG = 28.2833;
+
+    async function initPage(){
+      const sessionUser = await supabaseClient.auth.getUser();
+      if(!sessionUser.data.user){
+        window.location.href = 'index.html';
+        return;
+      }
+      document.getElementById('user-display').textContent = sessionUser.data.user.email;
+      initMap();
+    }
+
+    function initMap(){
+      map = L.map('map').setView([DEFAULT_LAT, DEFAULT_LNG], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      map.on('click', function(e) {
+        if(!pickupCoords) {
+          setPickup(e.latlng.lat, e.latlng.lng, `Location (${e.latlng.lat.toFixed(3)}, ${e.latlng.lng.toFixed(3)})`);
+        } else if(!dropoffCoords) {
+          setDropoff(e.latlng.lat, e.latlng.lng, `Location (${e.latlng.lat.toFixed(3)}, ${e.latlng.lng.toFixed(3)})`);
+        } else {
+          setDropoff(e.latlng.lat, e.latlng.lng, `Location (${e.latlng.lat.toFixed(3)}, ${e.latlng.lng.toFixed(3)})`);
+        }
+      });
+    }
+
+    function setPickup(lat, lng, label){
+      pickupCoords = { lat, lng };
+      document.getElementById('pickup-search').value = label;
+      if(pickupMarker) map.removeLayer(pickupMarker);
+      pickupMarker = L.marker([lat, lng], { title: "Pickup Point" }).addTo(map).bindPopup("Pickup Point").openPopup();
+      updateCalculations();
+    }
+
+    function setDropoff(lat, lng, label){
+      dropoffCoords = { lat, lng };
+      document.getElementById('dropoff-search').value = label;
+      if(dropoffMarker) map.removeLayer(dropoffMarker);
+      dropoffMarker = L.marker([lat, lng], { title: "Dropoff Point" }).addTo(map).bindPopup("Dropoff Point").openPopup();
+      updateCalculations();
+    }
+
+    async function geocodeAddress(type){
+      const query = document.getElementById(type + '-search').value.trim();
+      if(!query){ showToast('Enter an address to search.'); return; }
+      
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Lusaka Zambia')}`);
+        const data = await res.json();
+        if(data && data.length > 0){
+          const lat = parseFloat(data[0].lat);
+          const lng = parseFloat(data[0].lon);
+          map.setView([lat, lng], 14);
+          if(type === 'pickup') setPickup(lat, lng, data[0].display_name.split(',')[0]);
+          else setDropoff(lat, lng, data[0].display_name.split(',')[0]);
+        } else {
+          showToast('Location not found. Try clicking directly on the map.');
+        }
+      } catch(e) {
+        showToast('Error searching location.');
+      }
+    }
+
+    function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    function updateCalculations(){
+      const serviceType = document.getElementById('service-type').value;
+      const handlingFee = serviceType === 'passenger' ? 20.00 : 15.00;
+      let distanceKm = 0;
+
+      if(pickupCoords && dropoffCoords){
+        distanceKm = calculateDistanceKm(pickupCoords.lat, pickupCoords.lng, dropoffCoords.lat, dropoffCoords.lng);
+      }
+
+      const fuelPricePerLitre = 32.50;
+      const kmPerLitre = 35.0;
+      const fuelCost = distanceKm * (fuelPricePerLitre / kmPerLitre);
+      const total = handlingFee + fuelCost;
+
+      document.getElementById('disp-distance').textContent = distanceKm.toFixed(2) + ' KM';
+      document.getElementById('disp-handling').textContent = 'K' + handlingFee.toFixed(2);
+      document.getElementById('disp-fuel').textContent = 'K' + fuelCost.toFixed(2);
+      document.getElementById('disp-total').textContent = 'K' + total.toFixed(2);
+
+      return { distanceKm, handlingFee, fuelCost, total };
+    }
+
+    function selectPayment(provider){
+      selectedPayment = provider;
+      document.getElementById('pay-mtn').classList.toggle('selected', provider === 'mtn');
+      document.getElementById('pay-airtel').classList.toggle('selected', provider === 'airtel');
+    }
+
+    async function processPaymentAndDispatch(){
+      const pickupName = document.getElementById('pickup-search').value.trim();
+      const dropoffName = document.getElementById('dropoff-search').value.trim();
+      const phone = document.getElementById('pay-phone').value.trim();
+      const details = document.getElementById('order-details').value.trim();
+      const serviceType = document.getElementById('service-type').value;
+
+      if(!pickupName || !dropoffName){
+        showToast('Please select both pickup and drop-off points.');
+        return;
+      }
+      if(!phone || phone.length < 10){
+        showToast('Please enter a valid Mobile Money phone number.');
+        return;
+      }
+
+      const calcs = updateCalculations();
+      showToast(`Initiating ${selectedPayment.toUpperCase()} payment prompt on ${phone}...`);
+
+      const sessionUser = await supabaseClient.auth.getUser();
+      const userEmail = sessionUser.data.user.email;
+
+      const orderPayload = {
+        id: 'QP-' + Math.floor(100000 + Math.random() * 900000),
+        customer_email: userEmail,
+        service_type: serviceType,
+        pickup_name: pickupName,
+        pickup_lat: pickupCoords ? pickupCoords.lat : DEFAULT_LAT,
+        pickup_lng: pickupCoords ? pickupCoords.lng : DEFAULT_LNG,
+        dropoff_name: dropoffName,
+        dropoff_lat: dropoffCoords ? dropoffCoords.lat : DEFAULT_LAT,
+        dropoff_lng: dropoffCoords ? dropoffCoords.lng : DEFAULT_LNG,
+        details: details || 'No additional instructions',
+        distance_km: calcs.distanceKm.toFixed(2),
+        handling_fee: calcs.handlingFee.toFixed(2),
+        fuel_cost: calcs.fuelCost.toFixed(2),
+        total_price: calcs.total.toFixed(2),
+        payment_provider: selectedPayment,
+        payment_phone: phone,
+        payment_status: 'paid',
+        status: 'pending'
+      };
+
+      const { error } = await supabaseClient.from('orders').insert([orderPayload]);
+
+      if(error){
+        showToast('Error dispatching order: ' + error.message);
+      } else {
+        showToast('Payment Approved! Order dispatched to live riders.');
+        setTimeout(() => {
+          alert(`Order #${orderPayload.id} has been placed successfully! A rider will accept your request shortly.`);
+          window.location.reload();
+        }, 1200);
+      }
+    }
+
+    async function signout(){
+      await supabaseClient.auth.signOut();
+      window.location.href = 'index.html';
+    }
+
+    function showToast(msg){
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      setTimeout(()=>t.classList.remove('show'), 3500);
+    }
+
+    initPage();
+  </script>
+</body>
+</html>

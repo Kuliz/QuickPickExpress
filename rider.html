@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rider Dashboard | QuickPick Express</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabaseClient.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+    :root { --ink:#0e4c69; --muted:#5d7682; --paper:#f7f7f2; --white:#fff; --red:#ef4b3f; --blue:#1468a5; --green:#27a66f; --line:#dce8e3; --shadow:0 15px 45px rgba(14,76,105,.1); }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--paper); font-family:'DM Sans',sans-serif; }
+    button { cursor:pointer; border:0; font:inherit; }
+    .shell { max-width:1240px; margin:auto; padding:0 24px; }
+    .topbar { height:76px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:11px; font-family:'Space Grotesk'; font-size:20px; font-weight:700; text-decoration:none; color:var(--ink); }
+    .brand-mark { width:44px; height:44px; border-radius:12px; overflow:hidden; display:flex; align-items:center; justify-content:center; background:var(--ink); }
+    .brand-mark img { width:100%; height:100%; object-fit:cover; }
+    .brand em { font-style:normal; color:#f7b32b; }
+    .panel { background:white; border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); padding:24px; margin-top:24px; }
+    .driver-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:18px; margin-top:20px; }
+    .card { background:white; border:1px solid var(--line); border-radius:14px; padding:20px; position:relative; }
+    .card .badge { position:absolute; top:18px; right:18px; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700; text-transform:uppercase; background:#e0f2fe; color:var(--blue); }
+    .card h4 { margin:0 0 10px; font-family:'Space Grotesk'; font-size:16px; padding-right:70px; }
+    .card p { color:var(--muted); font-size:13px; margin:6px 0; }
+    .price-tag { font-size:22px; font-weight:700; color:var(--red); margin:14px 0; }
+    .primary { background:var(--red); color:white; padding:10px; border-radius:8px; font-weight:700; width:100%; text-align:center; }
+    .success { background:var(--green); color:white; padding:10px; border-radius:8px; font-weight:700; width:100%; text-align:center; }
+    .outline { background:white; color:var(--ink); padding:10px 16px; border:1px solid var(--line); border-radius:9px; font-weight:700; }
+    .toast { position:fixed; bottom:22px; right:22px; background:var(--ink); color:white; padding:14px 20px; border-radius:10px; z-index:1100; display:none; }
+    .toast.show { display:block; }
+  </style>
+</head>
+<body>
+  <header class="shell topbar">
+    <a href="index.html" class="brand">
+      <div class="brand-mark">
+        <img 
+          src="Quickpicklogo.jpg" 
+          alt="QuickPick Express Logo" 
+          onerror="this.onerror=null; this.src='Quickpicklogo.jpg.jpeg'; this.onerror=function(){this.src='Quickpicklogo.png';}" 
+        />
+      </div>
+      <span>QuickPick <em>Rider Workbench</em></span>
+    </a>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <span id="rider-email" style="font-size:13px;color:var(--muted);"></span>
+      <button class="outline" onclick="signout()">Sign Out</button>
+    </div>
+  </header>
+
+  <main class="shell" style="padding:20px 0 60px;">
+    <div class="panel">
+      <h2 style="font-family:'Space Grotesk';margin:0 0 6px;">Available &amp; Active Requests</h2>
+      <p style="color:var(--muted);font-size:14px;margin:0;">Real-time dispatch feed. Accept jobs to claim them directly.</p>
+      <div class="driver-grid" id="orders-container"></div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let activeOrders = [];
+    let currentRiderEmail = '';
+
+    async function checkRiderAccess(){
+      const sessionUser = await supabaseClient.auth.getUser();
+      if(!sessionUser.data.user){
+        window.location.href = 'index.html';
+        return;
+      }
+      
+      currentRiderEmail = sessionUser.data.user.email;
+      document.getElementById('rider-email').textContent = currentRiderEmail;
+
+      const { data: profile } = await supabaseClient.from('profiles').select('role').eq('id', sessionUser.data.user.id).single();
+      
+      if(profile && profile.role !== 'rider'){
+        alert('Access Denied: Rider portal is strictly for verified riders.');
+        window.location.href = 'customer.html';
+        return;
+      }
+
+      loadOrders();
+      subscribeRealtime();
+    }
+
+    async function loadOrders(){
+      const { data, error } = await supabaseClient
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if(!error){
+        activeOrders = data || [];
+        renderOrders();
+      }
+    }
+
+    function subscribeRealtime(){
+      supabaseClient
+        .channel('public:orders')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, payload => {
+          loadOrders();
+          showToast('Live order status updated!');
+        })
+        .subscribe();
+    }
+
+    function renderOrders(){
+      const container = document.getElementById('orders-container');
+      if(!activeOrders.length){
+        container.innerHTML = '<p style="color:var(--muted);">No pending dispatch requests at the moment.</p>';
+        return;
+      }
+
+      container.innerHTML = activeOrders.map(order => {
+        let actionButton = '';
+        if(order.status === 'pending'){
+          actionButton = `<button class="primary" onclick="updateOrderStatus('${order.id}', 'accepted')">Accept Delivery</button>`;
+        } else if(order.status === 'accepted' && order.rider_email === currentRiderEmail){
+          actionButton = `<button class="primary" style="background:var(--blue);" onclick="updateOrderStatus('${order.id}', 'in_transit')">Start Transit</button>`;
+        } else if(order.status === 'in_transit' && order.rider_email === currentRiderEmail){
+          actionButton = `<button class="success" onclick="updateOrderStatus('${order.id}', 'completed')">Mark Completed</button>`;
+        } else if(order.status === 'completed'){
+          actionButton = `<span style="color:var(--green);font-weight:700;font-size:13px;">✔ Job Completed</span>`;
+        } else {
+          actionButton = `<span style="color:var(--muted);font-size:12px;">Claimed by ${order.rider_email || 'another rider'}</span>`;
+        }
+
+        return `
+          <div class="card">
+            <span class="badge">${order.service_type}</span>
+            <h4>${order.pickup_name} → ${order.dropoff_name}</h4>
+            <p><strong>Customer:</strong> ${order.customer_email}</p>
+            <p><strong>Notes:</strong> ${order.details}</p>
+            <p><strong>Distance:</strong> ${order.distance_km} KM</p>
+            <p><strong>Payment:</strong> ${order.payment_provider ? order.payment_provider.toUpperCase() : 'MoMo'} (${order.payment_status})</p>
+            <div class="price-tag">K${order.total_price}</div>
+            ${actionButton}
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function updateOrderStatus(orderId, newStatus){
+      const updateData = { status: newStatus };
+      if(newStatus === 'accepted'){
+        updateData.rider_email = currentRiderEmail;
+      }
+
+      const { error } = await supabaseClient.from('orders').update(updateData).eq('id', orderId);
+      if(!error){
+        showToast('Order status updated successfully.');
+        loadOrders();
+      } else {
+        showToast('Error updating status: ' + error.message);
+      }
+    }
+
+    async function signout(){
+      await supabaseClient.auth.signOut();
+      window.location.href = 'index.html';
+    }
+
+    function showToast(msg){
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      setTimeout(()=>t.classList.remove('show'), 3000);
+    }
+
+    checkRiderAccess();
+  </script>
+</body>
+</html>

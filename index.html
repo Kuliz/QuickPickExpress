@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QuickPick Express | On-Demand Rides, Deliveries & Errands</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabaseClient.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+    :root { --ink:#0e4c69; --muted:#5d7682; --paper:#f7f7f2; --white:#fff; --red:#ef4b3f; --blue:#1468a5; --line:#dce8e3; --shadow:0 20px 60px rgba(14,76,105,.12); }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--paper); font-family:'DM Sans',sans-serif; }
+    button,input,select { font:inherit; }
+    button { cursor:pointer; border:0; }
+    .shell { max-width:1240px; margin:auto; padding:0 24px; }
+    .topbar { height:76px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:11px; font-family:'Space Grotesk'; font-size:20px; font-weight:700; text-decoration:none; color:var(--ink); }
+    .brand-mark { width:44px; height:44px; border-radius:12px; overflow:hidden; display:flex; align-items:center; justify-content:center; background:var(--ink); }
+    .brand-mark img { width:100%; height:100%; object-fit:cover; }
+    .brand em { font-style:normal; color:#f7b32b; }
+    .hero { padding:70px 0 50px; text-align:center; max-width:760px; margin:auto; }
+    h1 { font-family:'Space Grotesk',sans-serif; font-size:46px; letter-spacing:-1px; margin:14px 0 18px; line-height:1.15; }
+    .primary { background:var(--red); color:white; padding:14px 26px; border-radius:10px; font-weight:700; box-shadow:0 8px 18px rgba(239,75,63,.25); transition:transform .15s; }
+    .primary:hover { transform:translateY(-2px); }
+    .outline { background:white; color:var(--ink); padding:13px 22px; border:1px solid var(--line); border-radius:10px; font-weight:700; }
+    .actions { display:flex; justify-content:center; gap:15px; margin-top:28px; }
+    .services-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; margin:50px 0; }
+    .card { background:white; border:1px solid var(--line); border-radius:16px; padding:24px; text-align:left; box-shadow:var(--shadow); }
+    .card-icon { width:48px; height:48px; border-radius:12px; background:#eaf3f8; color:var(--blue); display:flex; align-items:center; justify-content:center; margin-bottom:16px; font-weight:700; }
+    .card h3 { margin:0 0 8px; font-family:'Space Grotesk'; }
+    .card p { margin:0; color:var(--muted); font-size:14px; line-height:1.5; }
+    .modal-backdrop { display:none; position:fixed; inset:0; background:rgba(14,35,50,.6); z-index:1000; place-items:center; padding:20px; }
+    .modal-backdrop.open { display:grid; }
+    .modal { background:white; width:min(420px,100%); border-radius:20px; padding:32px; box-shadow:var(--shadow); }
+    .field { display:flex; flex-direction:column; gap:6px; margin-top:14px; text-align:left; }
+    .field label { font-size:12px; font-weight:700; color:#536a70; text-transform:uppercase; }
+    .field input, .field select { border:1px solid var(--line); border-radius:9px; padding:12px; outline:none; background:#fbfdfc; }
+    .toast { position:fixed; bottom:22px; right:22px; background:var(--ink); color:white; padding:14px 20px; border-radius:10px; z-index:1100; display:none; }
+    .toast.show { display:block; }
+    @media (max-width:768px) { .services-grid { grid-template-columns:1fr; } h1 { font-size:32px; } }
+  </style>
+</head>
+<body>
+  <header class="shell topbar">
+    <a href="index.html" class="brand">
+      <div class="brand-mark">
+        <img 
+          src="Quickpicklogo.jpg" 
+          alt="QuickPick Express Logo" 
+          onerror="this.onerror=null; this.src='Quickpicklogo.jpg.jpeg'; this.onerror=function(){this.src='Quickpicklogo.png';}" 
+        />
+      </div>
+      <span>QuickPick <em>Express</em></span>
+    </a>
+    <button class="outline" onclick="openAuthModal('customer')">Sign In / Register</button>
+  </header>
+
+  <main class="shell hero">
+    <span style="color:var(--blue);font-weight:700;text-transform:uppercase;letter-spacing:1px;font-size:12px;">Zambia's Instant Delivery &amp; Ride Network</span>
+    <h1>Errands, Parcel Deliveries &amp; Motorbike Rides in One Tap.</h1>
+    <p style="color:var(--muted);font-size:16px;">Calculate live fuel-based trip rates, pay instantly via MTN MoMo or Airtel Money, and track your rider in real time.</p>
+    
+    <div class="actions">
+      <button class="primary" onclick="openAuthModal('customer')">Book Service Now</button>
+      <button class="outline" onclick="openAuthModal('rider')">Become a Rider</button>
+    </div>
+
+    <section class="services-grid">
+      <div class="card">
+        <div class="card-icon"><i data-lucide="package"></i></div>
+        <h3>Package Deliveries</h3>
+        <p>Send documents, electronics, or goods fast. Fixed K15 handling fee + transparent fuel/km rate.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon"><i data-lucide="bike"></i></div>
+        <h3>Passenger Drops</h3>
+        <p>Beat the traffic with safe, helmet-equipped motorbike rides. K20 handling fee + distance rate.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon"><i data-lucide="shopping-bag"></i></div>
+        <h3>Local Errands</h3>
+        <p>Need groceries bought or items picked up? Send a rider to execute local tasks for you directly.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Auth Modal -->
+  <div class="modal-backdrop" id="auth-modal">
+    <div class="modal">
+      <h2 style="font-family:'Space Grotesk';margin:0 0 6px;">Sign In or Register</h2>
+      <p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Access your customer or rider account.</p>
+      <div class="field"><label>Email Address</label><input type="email" id="auth-email" placeholder="name@example.com" /></div>
+      <div class="field"><label>Password</label><input type="password" id="auth-password" placeholder="••••••••" /></div>
+      <div class="field"><label>Account Role</label>
+        <select id="auth-role">
+          <option value="customer">Customer (Book Services)</option>
+          <option value="rider">Rider (Accept Deliveries)</option>
+        </select>
+      </div>
+      <button class="primary" style="width:100%;margin-top:20px;justify-content:center;" onclick="handleAuthSubmission()">Continue</button>
+      <button style="background:none;color:var(--muted);width:100%;margin-top:12px;font-size:13px;" onclick="closeAuthModal()">Cancel</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    function openAuthModal(role){
+      document.getElementById('auth-role').value = role;
+      document.getElementById('auth-modal').classList.add('open');
+    }
+    function closeAuthModal(){
+      document.getElementById('auth-modal').classList.remove('open');
+    }
+    async function handleAuthSubmission(){
+      const email = document.getElementById('auth-email').value.trim();
+      const password = document.getElementById('auth-password').value.trim();
+      const role = document.getElementById('auth-role').value;
+
+      if(!email || !password){ showToast('Please enter your email and password.'); return; }
+
+      let { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      
+      if(error){
+        const signUpRes = await supabaseClient.auth.signUp({ email, password });
+        if(signUpRes.error){
+          showToast(signUpRes.error.message);
+          return;
+        }
+        data = signUpRes;
+        if(data.user){
+          await supabaseClient.from('profiles').insert([{ id: data.user.id, email, role }]);
+        }
+      }
+
+      showToast('Authentication successful!');
+      setTimeout(() => {
+        window.location.href = role === 'rider' ? 'rider.html' : 'customer.html';
+      }, 800);
+    }
+    function showToast(msg){
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+    lucide.createIcons();
+  </script>
+</body>
+</html>
